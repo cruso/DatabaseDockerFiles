@@ -1,0 +1,36 @@
+FROM mcr.microsoft.com/windows/servercore:1803
+
+RUN powershell -Command (mkdir C:/data/net35)
+RUN powershell -Command (mkdir C:/data/mssql2008r2)
+RUN powershell -Command (mkdir C:/data/mssql2008r2sp3)
+
+COPY \net35 C:/data/net35
+COPY \mssql2008r2 C:/data/mssql2008r2
+COPY \mssql2008r2sp3 C:/data/mssql2008r2sp3
+
+RUN powershell DISM /Online /Enable-Feature /FeatureName:NetFx3ServerFeatures /All /LimitAccess /Source:"C:/data/net35"
+RUN powershell DISM /Online /Enable-Feature /FeatureName:NetFx3 /All /LimitAccess /Source:"C:/data/net35"
+
+RUN C:/data/mssql2008r2\setup.exe /q /ACTION=Install /FEATURES=SQL /INSTANCENAME=MSSQLSERVER /SECURITYMODE=SQL /SAPWD="only4Change" /SQLSVCACCOUNT="NT AUTHORITY\System" /SQLSYSADMINACCOUNTS="BUILTIN\Administrators" /TCPENABLED=1 /IACCEPTSQLSERVERLICENSETERMS /SKIPRULES=PerfMonCounterNotCorruptedCheck /AGTSVCACCOUNT="NT AUTHORITY\System"
+
+RUN C:/data/mssql2008r2sp3/setup.exe /q /IAcceptSQLServerLicenseTerms /Action=Patch /Instanceid=mssqlserver
+
+RUN powershell -Command (rm C:/data/net35 -recurse)
+#RUN powershell -Command (rm C:/data/mssql2008r2 -recurse)
+RUN powershell -Command (rm C:/data/mssql2008r2sp3 -recurse)
+
+RUN powershell -Command (set-service MSSQLSERVER -StartupType Automatic)
+
+SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
+
+COPY \start.ps1 /
+
+WORKDIR /
+
+ENV SA_PASSWORD "only4Change"
+
+ENV ACCEPT_EULA "Y"
+
+HEALTHCHECK --interval=5s CMD [ "sqlcmd", "-Q", "select 1" ]
+
+CMD .\start -sa_password $env:SA_PASSWORD -ACCEPT_EULA $env:ACCEPT_EULA -Verbose
